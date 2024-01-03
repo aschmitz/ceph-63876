@@ -1,0 +1,67 @@
+Expected SHA-256 hash for the full 16910.tar.gz file: 1e8cb0d1d469b840ece726d6a0ff9060ba0b73c0ba5204ba09c1e5259f29ffc4
+
+$ ls -li 16910.tar.gz
+1099552046338 -rw-r--r-- 1 1000 1000 14492018 Mar 15  2023 16910.tar.gz
+
+$ getfattr -n ceph.file.layout 16910.tar.gz
+# file: 16910.tar.gz
+ceph.file.layout="stripe_unit=4194304 stripe_count=1 object_size=4194304 pool=cephfs_data_bulk"
+
+# ceph osd map cephfs_data_bulk 1000268bd02.00000000
+osdmap e28200 pool 'cephfs_data_bulk' (13) object '1000268bd02.00000000' -> pg 13.77125ce6 (13.e6) -> up ([15,25,24,7,36,32], p15) acting ([15,25,24,7,36,32], p15)
+
+# ceph tell osd.* config set debug_osd 20 > /dev/null; \
+ceph tell osd.* config set debug_bluestore 20 > /dev/null; \
+ceph tell osd.* config set debug_ms 1 > /dev/null; \
+date +%T.%N; \
+rados get -p cephfs_data_bulk 1000268bd02.00000000 -; \
+date +%T.%N; \
+ceph tell osd.* config set debug_osd 1/5 > /dev/null; \
+ceph tell osd.* config set debug_bluestore 1/5 > /dev/null; \
+ceph tell osd.* config set debug_ms 0/0 > /dev/null
+
+07:54:12.219080873
+error getting cephfs_data_bulk/1000268bd02.00000000: (5) Input/output error
+07:54:12.262934651
+
+# sha256sum 16910.tar.gz
+05cfaf42d37dc1ce6d4e2c41143821d4c4f106cb2999ab683c51619aee7062e4  16910.tar.gz
+
+# service ceph-osd@15 stop
+# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-15 --pgid 13.e6 --op list | grep 1000268bd02.00000000
+Error getting attr on : 13.e6s0_head,0#13:67000000::::head#, (61) No data available
+["13.e6s0",{"oid":"1000268bd02.00000000","key":"","snapid":-2,"hash":1997692134,"max":0,"pool":13,"namespace":"","shard_id":0,"max":0}]
+
+# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-15 '["13.e6s0",{"oid":"1000268bd02.00000000","key":"","snapid":-2,"hash":1997692134,"max":0,"pool":13,"namespace":"","shard_id":0,"max":0}]' get-bytes > 1000268bd02.00000000.osd15
+
+# rados get -p cephfs_data_bulk 1000268bd02.00000000 1000268bd02.00000000.expected
+# # (Note, no error in response: the read succeeds.)
+
+# service ceph-osd@15 start
+
+# service ceph-osd@25 stop
+
+# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-25 --pgid 13.e6 --op list | grep 1000268bd02.00000000
+Error getting attr on : 13.e6s1_head,1#13:67000000::::head#, (61) No data available
+["13.e6s1",{"oid":"1000268bd02.00000000","key":"","snapid":-2,"hash":1997692134,"max":0,"pool":13,"namespace":"","shard_id":1,"max":0}]
+
+ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-32 '["13.e6s5",{"oid":"1000268bd02.00000000","key":"","snapid":-2,"hash":1997692134,"max":0,"pool":13,"namespace":"","shard_id":5,"max":0}]' get-bytes > 1000268bd02.00000000.osd32
+
+(etc.)
+
+# ceph osd erasure-code-profile get erasure_k4_m2
+crush-device-class=hdd
+crush-failure-domain=host
+crush-root=default
+k=4
+m=2
+packetsize=2048
+plugin=jerasure
+technique=blaum_roth
+w=7
+
+# ceph-erasure-code-tool decode plugin=jerasure,k=4,m=2,technique=blaum_roth,w=7,packetsize=2048 4096 1,2,3,4 17183_sharded
+*** Caught signal (Segmentation fault) **
+ in thread 7f37a9e6d080 thread_name:ceph-erasure-co
+malloc(): invalid size (unsorted)
+Aborted
